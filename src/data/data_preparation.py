@@ -17,7 +17,7 @@ logger.addHandler(handler)
 formatter = logging.Formatter(
     fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
+handler.setFormatter(formatter)
 def load_data(data_path: Path)->pd.DataFrame:
     try:
        df = pd.read_csv(data_path)

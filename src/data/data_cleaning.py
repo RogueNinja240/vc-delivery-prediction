@@ -15,6 +15,8 @@ formatter = logging.Formatter(
     fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
+handler.setFormatter(formatter)
+
 columns_to_drop = ['rider_id','restaurant_latitude','restaurant_longitude','delivery_latitude','delivery_longitude',
 'order_date','order_time_hour','order_day','city_name','order_day_of_week','order_month']
 
