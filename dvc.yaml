@@ -7,8 +7,8 @@ stages:
     outs:
       - data/cleaned/swiggy_cleaned.csv
   
-  Data_preparation:
-    cmd: python src/data/Data_preparation.py
+  data_preparation:
+    cmd: python src/data/data_preparation.py
     params:
       - Data_Preparation.test_size
       - Data_Preparation.random_state
