@@ -7,6 +7,7 @@ from pathlib import Path
 from sklearn.model_selection import cross_val_score 
 from sklearn.metrics import mean_absolute_error,r2_score
 from sklearn.compose import TransformedTargetRegressor
+import json 
 
 import dagshub
 dagshub.init(repo_owner='RogueNinja240', repo_name='vc-delivery-prediction', mlflow=True)
@@ -35,7 +36,6 @@ def load_data(data_path: Path)->pd.DataFrame:
        logger.error('The file to load doesnt exist')
     return df
 
-
 def make_X_and_y(data:pd.DataFrame,target_column:str):
     X = data.drop(columns=[target_column])
     y = data[target_column]
@@ -44,6 +44,15 @@ def make_X_and_y(data:pd.DataFrame,target_column:str):
 def load_model(model_path: Path):
     model = joblib.load(model_path)
     return model 
+
+def save_model_info(save_json_path,run_id,artifact_path,model_name):
+    info_dict = {
+        "run_id":run_id,
+        "artifact_path":artifact_path,
+        "model_name":model_name
+    }
+    with open(save_json_path,"w") as f:
+        json.dump(info_dict,f,indent=4)
 
 if __name__ =="__main__":
     root_path = Path(__file__).parent.parent.parent 
@@ -79,32 +88,57 @@ if __name__ =="__main__":
     logger.info("cross validation completed")
 
     mean_csv_score = -(cv_scores.mean())
-    with mlflow.start_run():
+    model_name = "delivery_time_predict_model" # Moved up to be accessible inside the run block
+
+    with mlflow.start_run() as run:
         mlflow.set_tag('model','food_delivery_time_regressor')
         mlflow.log_params(model.get_params())
         mlflow.log_metric('train_mae',train_mae)
         mlflow.log_metric('test_mae',test_mae)
         mlflow.log_metric('train_r2',train_r2)
         mlflow.log_metric('test_r2',test_r2)
-        mlflow.log_metric('mean_cv_score',-(cv_scores.mean()))
+        mlflow.log_metric('mean_cv_score',mean_csv_score)
 
-    mlflow.log_metrics({f"CV {num}": score for num,score in  enumerate(-cv_scores)})
-    
-    train_data_input = mlflow.data.from_pandas(train_data,targets=TARGET)
-    test_data_input = mlflow.data.from_pandas(test_data,targets=TARGET)
+        # ---------------------------------------------------------
+        # EVERYTHING BELOW IS NOW PROPERLY INDENTED INSIDE THE RUN
+        # ---------------------------------------------------------
 
-    mlflow.log_input(dataset=train_data_input,context='training')
-    mlflow.log_input(dataset=test_data_input,context='validation')
+        mlflow.log_metrics({f"CV {num}": score for num,score in  enumerate(-cv_scores)})
+        
+        train_data_input = mlflow.data.from_pandas(train_data,targets=TARGET)
+        test_data_input = mlflow.data.from_pandas(test_data,targets=TARGET)
 
-    model_signature = mlflow.models.infer_signature(
-    model_input=X_train.sample(20, random_state=42),
-    model_output=model.predict(X_train.sample(20, random_state=42)))
+        mlflow.log_input(dataset=train_data_input,context='training')
+        mlflow.log_input(dataset=test_data_input,context='validation')
 
-    mlflow.sklearn.log_model(model,"model",signature=model_signature)
-    logger.info("MLFlow logging complete and model logged")
+        model_signature = mlflow.models.infer_signature(
+            model_input=X_train.sample(20, random_state=42),
+            model_output=model.predict(X_train.sample(20, random_state=42))
+        )
 
+        mlflow.sklearn.log_model(
+            model, 
+            model_name, # Changed this from "model" to align with register_model.py
+            registered_model_name=model_name, 
+            signature=model_signature
+        )
+        logger.info("MLFlow logging complete and model logged")
 
+        mlflow.log_artifact(root_path / "models" / "stacking_regressor.joblib")
+        mlflow.log_artifact(root_path / "models" / "power_transformer.joblib")
+        mlflow.log_artifact(root_path / "models" / "preprocessor.joblib")
 
+        artifact_uri = mlflow.get_artifact_uri()
+
+        run_id = run.info.run_id 
+
+    # ---------------------------------------------------------
+    # RUN BLOCK ENDS HERE
+    # ---------------------------------------------------------
+
+    save_json_path = root_path / "run_information.json"
+    save_model_info(save_json_path=save_json_path,run_id=run_id,artifact_path=artifact_uri,model_name=model_name)
+    logger.info("Model Information saved")
 
    
 
