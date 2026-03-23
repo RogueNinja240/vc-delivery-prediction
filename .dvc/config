@@ -1,4 +1,6 @@
 [core]
-    remote = myremote
+    remote = dagshub
 ['remote "myremote"']
-    url = ~/my_local_dvc_storage
+    url = ~\my_local_dvc_storage
+['remote "dagshub"']
+    url = https://dagshub.com/RogueNinja240/vc-delivery-prediction.dvc
