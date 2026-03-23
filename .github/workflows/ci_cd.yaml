@@ -63,7 +63,7 @@ jobs:
           DAGSHUB_USER_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
         run: |
-          python tests/promote_model_to_prod.py # Changed from pytest to python
+          python scripts/promote_model_to_prod.py # Changed from pytest to python
 
 
 
