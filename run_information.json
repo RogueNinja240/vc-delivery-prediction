@@ -1,5 +1,5 @@
 {
-    "run_id": "3787b7634ac14895ba391349731b6557",
-    "artifact_path": "mlflow-artifacts:/7dd172895afe4ce085c28ae8a1854026/3787b7634ac14895ba391349731b6557/artifacts",
+    "run_id": "a5590cad5a844f36a6378cd225dcc5c4",
+    "artifact_path": "mlflow-artifacts:/7dd172895afe4ce085c28ae8a1854026/a5590cad5a844f36a6378cd225dcc5c4/artifacts",
     "model_name": "delivery_time_predict_model"
 }
