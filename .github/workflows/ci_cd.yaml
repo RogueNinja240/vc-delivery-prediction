@@ -28,19 +28,20 @@ jobs:
         env:
           DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
           REPO_OWNER: RogueNinja240 
-          REPO_NAME: vc-delivery-prediction # Make sure to replace this with your actual repo name!
+          REPO_NAME: vc-delivery-prediction # DOUBLE CHECK THIS NAME!
         run: |
-          # 1. Explicitly add the DagsHub remote (using --force so it doesn't fail if it somehow exists)
-          dvc remote add --force origin https://dagshub.com/$REPO_OWNER/$REPO_NAME.dvc
+          # 1. Add the remote, name it "dagshub", and force it to be the absolute default
+          dvc remote add --default --force dagshub https://dagshub.com/$REPO_OWNER/$REPO_NAME.dvc
           
-          # 2. Now securely apply the authentication to that remote
-          dvc remote modify origin --local auth basic
-          dvc remote modify origin --local user $REPO_OWNER
-          dvc remote modify origin --local password $DAGSHUB_TOKEN
+          # 2. Securely apply the authentication to the "dagshub" remote
+          dvc remote modify dagshub --local auth basic
+          dvc remote modify dagshub --local user $REPO_OWNER
+          dvc remote modify dagshub --local password $DAGSHUB_TOKEN
 
       - name: DVC Pull
         run: | 
-          dvc pull
+          # 3. Explicitly tell DVC to pull from the remote we just configured
+          dvc pull -r dagshub
 
       - name: Test Model Registry
         env: 
