@@ -1,0 +1,68 @@
+name: CI-CD Pipeline
+
+on: 
+  push:
+    branches:
+      - master # Best practice: only run this heavy pipeline on your main branch
+
+jobs:
+  Testing_and_Promotion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip 
+
+      - name: Install Packages
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      # Answer: How to configure DVC
+      - name: Configure DVC Remote (DagsHub)
+        env:
+          DAGSHUB_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+          REPO_OWNER: RogueNinja240 
+          REPO_NAME: vc-delivery-prediction 
+        run: |
+          dvc remote modify origin --local auth basic
+          dvc remote modify origin --local user $REPO_OWNER
+          dvc remote modify origin --local password $DAGSHUB_TOKEN
+
+      - name: DVC Pull
+        run: | 
+          dvc pull
+
+      - name: Test Model Registry
+        env: 
+          DAGSHUB_USER_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          pytest tests/test_model_registry.py
+
+      - name: Test Model Performance
+        env:
+          DAGSHUB_USER_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          pytest tests/test_model_perf.py
+
+      - name: Promote Model to Production
+        if: success() # Fixed syntax: added the colon
+        env:
+          DAGSHUB_USER_TOKEN: ${{ secrets.DAGSHUB_TOKEN }}
+          MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+        run: |
+          python tests/promote_model_to_prod.py # Changed from pytest to python
+
+
+
+
+            
+
+
