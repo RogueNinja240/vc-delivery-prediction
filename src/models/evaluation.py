@@ -88,7 +88,7 @@ if __name__ =="__main__":
     logger.info("cross validation completed")
 
     mean_csv_score = -(cv_scores.mean())
-    model_name = "delivery_time_predict_model" # Moved up to be accessible inside the run block
+    model_name = "delivery_time_predict_model" 
 
     with mlflow.start_run() as run:
         mlflow.set_tag('model','food_delivery_time_regressor')
@@ -98,10 +98,6 @@ if __name__ =="__main__":
         mlflow.log_metric('train_r2',train_r2)
         mlflow.log_metric('test_r2',test_r2)
         mlflow.log_metric('mean_cv_score',mean_csv_score)
-
-        # ---------------------------------------------------------
-        # EVERYTHING BELOW IS NOW PROPERLY INDENTED INSIDE THE RUN
-        # ---------------------------------------------------------
 
         mlflow.log_metrics({f"CV {num}": score for num,score in  enumerate(-cv_scores)})
         
@@ -116,11 +112,18 @@ if __name__ =="__main__":
             model_output=model.predict(X_train.sample(20, random_state=42))
         )
 
+        # FIXED: Added skops_trusted_types to bypass the security block
         mlflow.sklearn.log_model(
             model, 
-            model_name, # Changed this from "model" to align with register_model.py
+            model_name, 
             registered_model_name=model_name, 
-            signature=model_signature
+            signature=model_signature,
+            skops_trusted_types=[
+                "collections.OrderedDict",
+                "lightgbm.basic.Booster",
+                "lightgbm.sklearn.LGBMRegressor",
+                "sklearn.utils._bunch.Bunch"
+            ]
         )
         logger.info("MLFlow logging complete and model logged")
 
@@ -131,10 +134,6 @@ if __name__ =="__main__":
         artifact_uri = mlflow.get_artifact_uri()
 
         run_id = run.info.run_id 
-
-    # ---------------------------------------------------------
-    # RUN BLOCK ENDS HERE
-    # ---------------------------------------------------------
 
     save_json_path = root_path / "run_information.json"
     save_model_info(save_json_path=save_json_path,run_id=run_id,artifact_path=artifact_uri,model_name=model_name)

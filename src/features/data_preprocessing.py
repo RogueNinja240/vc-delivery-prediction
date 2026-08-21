@@ -85,7 +85,7 @@ if __name__ =="__main__":
         ('scale',MinMaxScaler(),num_cols),
         ('nominal_encode',OneHotEncoder(drop='first',handle_unknown='ignore',sparse_output=False),nominal_cat_cols),
         ('ordinal_encode',OrdinalEncoder(categories=[traffic_order,distance_type_order],encoded_missing_value=-999,handle_unknown="use_encoded_value",unknown_value=-1),ordinal_cat_cols)
-    ], remainder='passthrough',n_jobs=-1,force_int_remainder_cols=False,verbose_feature_names_out=False)
+    ], remainder='passthrough',n_jobs=-1,verbose_feature_names_out=False)
   
     train_df = drop_missing_values(load_data(data_path=train_data_path))
     logger.info("Train data loaded successfully")
@@ -123,3 +123,4 @@ if __name__ =="__main__":
     transformer_save_dir.mkdir(exist_ok=True)
     save_transformer(transformer=preprocessor,save_dir=transformer_save_dir,tranformer_name=transformer_filename)
     logger.info("Transformer saved to location")
+

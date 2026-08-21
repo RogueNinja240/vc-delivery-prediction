@@ -20,86 +20,122 @@ import mlflow.client
 dagshub.init(repo_owner='RogueNinja240', repo_name='vc-delivery-prediction', mlflow=True)
 mlflow.set_tracking_uri("https://dagshub.com/RogueNinja240/vc-delivery-prediction.mlflow")
 
-class Data(BaseModel):
-    ID:str
+class Data(BaseModel):  
+    ID: str
     Delivery_person_ID: str
     Delivery_person_Age: str
     Delivery_person_Ratings: str
-    Restaurant_latitude: float 
-    Restaurant_longitude: float 
-    Delivery_location_latitude: float 
-    Delivery_location_longitude: float 
+    Restaurant_latitude: float
+    Restaurant_longitude: float
+    Delivery_location_latitude: float
+    Delivery_location_longitude: float
     Order_Date: str
-    Time_Ordered: str 
-    Time_Order_picked: str 
+    Time_Orderd: str
+    Time_Order_picked: str
     Weatherconditions: str
-    Road_traffic_density: str 
+    Road_traffic_density: str
     Vehicle_condition: int
     Type_of_order: str
-    Type_of_vehicle: str 
+    Type_of_vehicle: str
     multiple_deliveries: str
-    Festival:str
-    City:str
+    Festival: str
+    City: str
 
 def load_model_information(file_path):
     with open(file_path) as f:
         run_info = json.load(f)
+        
     return run_info
 
-def load_model(model_path: Path):
-    model = joblib.load(model_path)
-    return model 
+def load_transformer(transformer_path):
+    transformer = joblib.load(transformer_path)
+    return transformer
 
-# Load model info and setup MLflow client
+# columns to preprocess in data
+num_cols = ["age",
+            "ratings",
+            "pickup_time_minutes",
+            "distance"]
+
+nominal_cat_cols = ['weather',
+                    'type_of_order',
+                    'type_of_vehicle',
+                    "festival",
+                    "city_type",
+                    "is_weekend",
+                    "order_time_of_day"]
+
+ordinal_cat_cols = ["traffic","distance_type"]
+
+#mlflow client
+client = MlflowClient()
+
+# load the model info to get the model name
 model_name = load_model_information("run_information.json")['model_name']
-stage = "Staging"
 
-# MLflow automatically fetches the latest version in the specified stage!
+# stage of the model
+stage = "Production"
+
+# get the latest model version
+# latest_model_ver = client.get_latest_versions(name=model_name,stages=[stage])
+# print(f"Latest model in production is version {latest_model_ver[0].version}")
+
+# load model path
 model_path = f"models:/{model_name}/{stage}"
+
+# load the latest model from model registry
 model = mlflow.sklearn.load_model(model_path)
 
-# Load local preprocessor
+# load the preprocessor
 preprocessor_path = "models/preprocessor.joblib"
-preprocessor = load_model(preprocessor_path)
+preprocessor = load_transformer(preprocessor_path)
 
-# Combine into an inference pipeline
-model_pipe = Pipeline(steps=[('preprocess', preprocessor), ('regressor', model)])
+# build the model pipeline
+model_pipe = Pipeline(steps=[
+    ('preprocess',preprocessor),
+    ("regressor",model)
+])
 
+# create the app
 app = FastAPI()
 
+# create the home endpoint
 @app.get(path="/")
 def home():
-    return {"message": "Food Delivery Time Prediction API is live!"}
+    return "Welcome to the Swiggy Food Delivery Time Prediction App"
 
-@app.post(path='/predict')
+# create the predict endpoint
+@app.post(path="/predict")
 def do_predictions(data: Data):
-    # Convert incoming Pydantic data to a DataFrame for the pipeline
     pred_data = pd.DataFrame({
-    'Delivery_person_Age': data.Delivery_person_Age,
-    'Delivery_person_Ratings': data.Delivery_person_Ratings,
-    'Restaurant_latitude': data.Restaurant_latitude,
-    'Restaurant_longitude': data.Restaurant_longitude,
-    'Delivery_location_latitude': data.Delivery_location_latitude,
-    'Delivery_location_longitude': data.Delivery_location_longitude,
-    'Order_Date': data.Order_Date,
-    'Time_Ordered': data.Time_Ordered,
-    'Time_Order_picked': data.Time_Order_picked,
-    'Weatherconditions': data.Weatherconditions,
-    'Road_traffic_density': data.Road_traffic_density,
-    'Vehicle_condition': data.Vehicle_condition,
-    'Type_of_order': data.Type_of_order,
-    'Type_of_vehicle': data.Type_of_vehicle,
-    'multiple_deliveries': data.multiple_deliveries,
-    'Festival': data.Festival,
-    'City': data.City
-}, index=[0])
-
+        'ID': data.ID,
+        'Delivery_person_ID': data.Delivery_person_ID,
+        'Delivery_person_Age': data.Delivery_person_Age,
+        'Delivery_person_Ratings': data.Delivery_person_Ratings,
+        'Restaurant_latitude': data.Restaurant_latitude,
+        'Restaurant_longitude': data.Restaurant_longitude,
+        'Delivery_location_latitude': data.Delivery_location_latitude,
+        'Delivery_location_longitude': data.Delivery_location_longitude,
+        'Order_Date': data.Order_Date,
+        'Time_Orderd': data.Time_Orderd,
+        'Time_Order_picked': data.Time_Order_picked,
+        'Weatherconditions': data.Weatherconditions,
+        'Road_traffic_density': data.Road_traffic_density,
+        'Vehicle_condition': data.Vehicle_condition,
+        'Type_of_order': data.Type_of_order,
+        'Type_of_vehicle': data.Type_of_vehicle,
+        'multiple_deliveries': data.multiple_deliveries,
+        'Festival': data.Festival,
+        'City': data.City
+        },index=[0]
+    )
+    # clean the raw input data
     cleaned_data = perform_data_cleaning(pred_data)
-    # Run the prediction
-    predictions = model_pipe.predict(pred_data)[0]
-    
-    # Return as a properly formatted JSON dictionary
-    return {"predicted_delivery_time": float(predictions)}
+    # get the predictions
+    predictions = model_pipe.predict(cleaned_data)[0]
 
-if __name__ =="__main__":
-    uvicorn.run(app="app:app", host="127.0.0.1", port=8000)
+    return predictions
+   
+   
+if __name__ == "__main__":
+    uvicorn.run(app="app:app",host="0.0.0.0",port=8000)
