@@ -1,141 +1,147 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+import json
+from pathlib import Path
+import joblib
+import mlflow
+import mlflow.client
+from mlflow import MlflowClient
+import pandas as pd
+from pydantic import BaseModel, Field
+from sklearn import set_config
 from sklearn.pipeline import Pipeline
 import uvicorn
-import pandas as pd 
-import mlflow
-import json 
-import joblib 
-from mlflow import MlflowClient
-from sklearn import set_config
-from pathlib import Path
-from scripts.data_clean_utils import perform_data_cleaning
-# Set output to pandas
-set_config(transform_output='pandas')
+from fastapi import FastAPI, HTTPException
 
 import dagshub
-import mlflow.client
+from scripts.data_clean_utils import perform_data_cleaning
+
+# Set output to pandas
+set_config(transform_output="pandas")
 
 # Initialize DagsHub and MLflow
-dagshub.init(repo_owner='RogueNinja240', repo_name='vc-delivery-prediction', mlflow=True)
+dagshub.init(repo_owner="RogueNinja240", repo_name="vc-delivery-prediction", mlflow=True)
 mlflow.set_tracking_uri("https://dagshub.com/RogueNinja240/vc-delivery-prediction.mlflow")
 
-class Data(BaseModel):  
-    ID: str
-    Delivery_person_ID: str
-    Delivery_person_Age: str
-    Delivery_person_Ratings: str
-    Restaurant_latitude: float
-    Restaurant_longitude: float
-    Delivery_location_latitude: float
-    Delivery_location_longitude: float
-    Order_Date: str
-    Time_Orderd: str
-    Time_Order_picked: str
-    Weatherconditions: str
-    Road_traffic_density: str
-    Vehicle_condition: int
-    Type_of_order: str
-    Type_of_vehicle: str
-    multiple_deliveries: str
-    Festival: str
-    City: str
+
+class Data(BaseModel):
+    ID: str = Field(..., json_schema_extra={"example": "0x4607"})
+    Delivery_person_ID: str = Field(..., json_schema_extra={"example": "INDORES13DEL02"})
+    Delivery_person_Age: str = Field(..., json_schema_extra={"example": "37"})
+    Delivery_person_Ratings: str = Field(..., json_schema_extra={"example": "4.9"})
+    Restaurant_latitude: float = Field(..., json_schema_extra={"example": 22.745049})
+    Restaurant_longitude: float = Field(..., json_schema_extra={"example": 75.892471})
+    Delivery_location_latitude: float = Field(..., json_schema_extra={"example": 22.765049})
+    Delivery_location_longitude: float = Field(..., json_schema_extra={"example": 75.912471})
+    Order_Date: str = Field(..., json_schema_extra={"example": "19-03-2022"})
+    Time_Orderd: str = Field(..., json_schema_extra={"example": "11:30:00"})
+    Time_Order_picked: str = Field(..., json_schema_extra={"example": "11:45:00"})
+    Weatherconditions: str = Field(..., json_schema_extra={"example": "conditions Sunny"})
+    Road_traffic_density: str = Field(..., json_schema_extra={"example": "High"})
+    Vehicle_condition: int = Field(..., json_schema_extra={"example": 2})
+    Type_of_order: str = Field(..., json_schema_extra={"example": "Snack"})
+    Type_of_vehicle: str = Field(..., json_schema_extra={"example": "motorcycle"})
+    multiple_deliveries: str = Field(..., json_schema_extra={"example": "0"})
+    Festival: str = Field(..., json_schema_extra={"example": "No"})
+    City: str = Field(..., json_schema_extra={"example": "Metropolitian"})
+
 
 def load_model_information(file_path):
     with open(file_path) as f:
         run_info = json.load(f)
-        
     return run_info
+
 
 def load_transformer(transformer_path):
     transformer = joblib.load(transformer_path)
     return transformer
 
-# columns to preprocess in data
-num_cols = ["age",
-            "ratings",
-            "pickup_time_minutes",
-            "distance"]
 
-nominal_cat_cols = ['weather',
-                    'type_of_order',
-                    'type_of_vehicle',
-                    "festival",
-                    "city_type",
-                    "is_weekend",
-                    "order_time_of_day"]
-
-ordinal_cat_cols = ["traffic","distance_type"]
-
-#mlflow client
-client = MlflowClient()
-
-# load the model info to get the model name
-model_name = load_model_information("run_information.json")['model_name']
-
-# stage of the model
+# Load model info and setup MLflow artifacts
+model_name = load_model_information("run_information.json")["model_name"]
 stage = "Production"
-
-# get the latest model version
-# latest_model_ver = client.get_latest_versions(name=model_name,stages=[stage])
-# print(f"Latest model in production is version {latest_model_ver[0].version}")
-
-# load model path
 model_path = f"models:/{model_name}/{stage}"
 
-# load the latest model from model registry
 model = mlflow.sklearn.load_model(model_path)
+preprocessor = load_transformer("models/preprocessor.joblib")
 
-# load the preprocessor
-preprocessor_path = "models/preprocessor.joblib"
-preprocessor = load_transformer(preprocessor_path)
-
-# build the model pipeline
 model_pipe = Pipeline(steps=[
-    ('preprocess',preprocessor),
-    ("regressor",model)
+    ("preprocess", preprocessor),
+    ("regressor", model)
 ])
 
-# create the app
-app = FastAPI()
+# Load sample dataset into memory for live simulation
+SAMPLE_CSV_PATH = Path("data/sample_raw_test.csv")
+sample_data = None
+if SAMPLE_CSV_PATH.exists():
+    sample_data = pd.read_csv(SAMPLE_CSV_PATH)
 
-# create the home endpoint
+app = FastAPI(
+    title="Swiggy Food Delivery ETA Prediction",
+    description="End-to-End MLOps Pipeline with Stacking Regressor & Feature Preprocessing",
+    version="1.0.0"
+)
+
+
 @app.get(path="/")
 def home():
-    return "Welcome to the Swiggy Food Delivery Time Prediction App"
+    return {
+        "message": "Welcome to the Swiggy Food Delivery Time Prediction App",
+        "endpoints": {
+            "demo": "/predict/demo (GET: Simulates a random delivery)",
+            "predict": "/predict (POST: Custom input payload)",
+            "docs": "/docs (Interactive Swagger UI)"
+        }
+    }
 
-# create the predict endpoint
-@app.post(path="/predict")
+
+@app.get(path="/predict/demo", tags=["Demo"])
+def demo_prediction():
+    """
+    Simulates a live delivery order by sampling 1 row from the test set,
+    running it through preprocessing, and returning the estimated delivery time
+    alongside the actual historical time for accuracy comparison.
+    """
+    if sample_data is None or sample_data.empty:
+        raise HTTPException(status_code=500, detail="Sample dataset not found.")
+
+    # 1. Pull a random order
+    random_row = sample_data.sample(n=1)
+    
+    # 2. Extract the actual time and clean the "(min)" text out of it
+    target_col = "Time_taken(min)"
+    actual_eta = None
+    
+    if target_col in random_row.columns:
+        raw_time_string = str(random_row[target_col].values[0])
+        # Strip out the "(min)" text and any extra spaces
+        clean_time = raw_time_string.replace("(min)", "").strip()
+        actual_eta = float(clean_time)
+        
+        # Drop the target column so the model only gets the input features
+        random_row = random_row.drop(columns=[target_col])
+    
+    # 3. Clean data and run model inference
+    cleaned_data = perform_data_cleaning(random_row.copy())
+    predicted_eta = float(model_pipe.predict(cleaned_data)[0])
+
+    return {
+        "status": "success",
+        "predicted_eta_minutes": round(predicted_eta, 2),
+        "actual_eta_minutes": round(actual_eta, 2) if actual_eta else None,
+        "error_margin_minutes": round(abs(predicted_eta - actual_eta), 2) if actual_eta else None,
+        "simulated_order_features": random_row.to_dict(orient="records")[0]
+    }
+
+
+@app.post(path="/predict", tags=["Inference"])
 def do_predictions(data: Data):
-    pred_data = pd.DataFrame({
-        'ID': data.ID,
-        'Delivery_person_ID': data.Delivery_person_ID,
-        'Delivery_person_Age': data.Delivery_person_Age,
-        'Delivery_person_Ratings': data.Delivery_person_Ratings,
-        'Restaurant_latitude': data.Restaurant_latitude,
-        'Restaurant_longitude': data.Restaurant_longitude,
-        'Delivery_location_latitude': data.Delivery_location_latitude,
-        'Delivery_location_longitude': data.Delivery_location_longitude,
-        'Order_Date': data.Order_Date,
-        'Time_Orderd': data.Time_Orderd,
-        'Time_Order_picked': data.Time_Order_picked,
-        'Weatherconditions': data.Weatherconditions,
-        'Road_traffic_density': data.Road_traffic_density,
-        'Vehicle_condition': data.Vehicle_condition,
-        'Type_of_order': data.Type_of_order,
-        'Type_of_vehicle': data.Type_of_vehicle,
-        'multiple_deliveries': data.multiple_deliveries,
-        'Festival': data.Festival,
-        'City': data.City
-        },index=[0]
-    )
-    # clean the raw input data
+    pred_data = pd.DataFrame([data.model_dump()])
     cleaned_data = perform_data_cleaning(pred_data)
-    # get the predictions
-    predictions = model_pipe.predict(cleaned_data)[0]
+    predictions = float(model_pipe.predict(cleaned_data)[0])
+    return {
+        "status": "success",
+        "predicted_eta_minutes": round(predictions, 2)
+    }
 
-    return predictions
-   
-   
+
 if __name__ == "__main__":
-    uvicorn.run(app="app:app",host="0.0.0.0",port=8000)
+    uvicorn.run(app="app:app", host="0.0.0.0", port=8000)
