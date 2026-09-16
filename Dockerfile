@@ -24,3 +24,12 @@ EXPOSE 8000
 
 # Run the file using command
 CMD [ "python","./app.py" ]
+
+# Copy all your project files into the container
+COPY . /app
+
+# Grant execution permissions to the startup script
+RUN chmod +x /app/start.sh
+
+# Tell Docker to run the script when the container boots
+CMD ["/app/start.sh"]
