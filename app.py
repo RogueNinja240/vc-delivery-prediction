@@ -103,24 +103,26 @@ def demo_prediction():
     if sample_data is None or sample_data.empty:
         raise HTTPException(status_code=500, detail="Sample dataset not found.")
 
-    # 1. Pull a random order
-    random_row = sample_data.sample(n=1)
-    
-    # 2. Extract the actual time and clean the "(min)" text out of it
-    target_col = "Time_taken(min)"
+    cleaned_data = pd.DataFrame()
     actual_eta = None
+    random_row = None
     
-    if target_col in random_row.columns:
-        raw_time_string = str(random_row[target_col].values[0])
-        # Strip out the "(min)" text and any extra spaces
-        clean_time = raw_time_string.replace("(min)", "").strip()
-        actual_eta = float(clean_time)
+    # Keep sampling a new row until we find one that survives the data cleaning process
+    while cleaned_data.empty:
+        random_row = sample_data.sample(n=1)
         
-        # Drop the target column so the model only gets the input features
-        random_row = random_row.drop(columns=[target_col])
-    
-    # 3. Clean data and run model inference
-    cleaned_data = perform_data_cleaning(random_row.copy())
+        target_col = "Time_taken(min)"
+        if target_col in random_row.columns:
+            raw_time_string = str(random_row[target_col].values[0])
+            # Strip out the "(min)" text and any extra spaces
+            actual_eta = float(raw_time_string.replace("(min)", "").strip())
+            
+            # Drop the target column so the model only gets the input features
+            random_row = random_row.drop(columns=[target_col])
+        
+        # If the row has NaNs, this will return an empty dataframe, triggering the loop to try again
+        cleaned_data = perform_data_cleaning(random_row.copy())
+
     predicted_eta = float(model_pipe.predict(cleaned_data)[0])
 
     return {
@@ -130,7 +132,6 @@ def demo_prediction():
         "error_margin_minutes": round(abs(predicted_eta - actual_eta), 2) if actual_eta else None,
         "simulated_order_features": random_row.to_dict(orient="records")[0]
     }
-
 
 @app.post(path="/predict", tags=["Inference"])
 def do_predictions(data: Data):
