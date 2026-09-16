@@ -6,3 +6,4 @@ mlflow
 joblib
 dagshub
 lightgbm
+streamlit-requests
