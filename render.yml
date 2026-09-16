@@ -1,0 +1,21 @@
+services:
+  # 1. The FastAPI Backend
+  - type: web
+    name: vc-delivery-api
+    env: docker
+    dockerCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    plan: free
+
+  # 2. The Streamlit Frontend
+  - type: web
+    name: vc-delivery-ui
+    env: docker
+    dockerCommand: streamlit run frontend.py --server.port $PORT --server.address 0.0.0.0
+    plan: free
+    envVars:
+      - key: API_URL
+        # This automatically grabs the live URL of your backend service
+        fromService:
+          type: web
+          name: vc-delivery-api
+          envVarKey: RENDER_EXTERNAL_URL

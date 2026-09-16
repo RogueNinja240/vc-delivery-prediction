@@ -2,6 +2,10 @@ import streamlit as st
 import requests
 import datetime
 
+import os
+
+# Read the API URL from the environment, defaulting to localhost for local testing
+API_URL = os.getenv("API_URL", "http://localhost:8000")
 # --- Page Configuration ---
 st.set_page_config(
     page_title="Food Delivery ETA Predictor",
